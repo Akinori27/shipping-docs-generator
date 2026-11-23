@@ -1,0 +1,96 @@
+# 出荷CSV→納品明細 自動生成ツール Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** 出荷CSVを検証し、問題のない伝票だけを納品明細Excel/PDFにし、問題行を要確認一覧に出す。
+
+**Architecture:** 読込(reader) → 行チェック(validator) → 伝票化と伝票単位の保留判定(grouper) → 出力(excel/pdf/review writer) を `app.run()` が束ねる。各段は純粋関数中心で、出力は毎回新しい日時フォルダ。
+
+**Tech Stack:** Python 3.10+, openpyxl, reportlab, pytest
+
+**Spec:** `docs/superpowers/specs/2026-11-23-shipping-docs-generator-design.md`
+
+## Global Constraints
+
+- 入力列（順不同可・過不足はエラー）: `伝票番号, 明細ID, 出荷日, 得意先コード, 得意先名, 商品コード, 商品名, 数量, 単位, 単価, 備考`
+- 必須: 伝票番号, 明細ID, 出荷日, 得意先名, 商品コード, 商品名, 数量, 単価
+- 数量は1以上の整数、単価は0以上のDecimal、出荷日は YYYY-MM-DD / YYYY/MM/DD
+- テンプレート明細欄は15行
+- 元CSVを変更しない／外部通信しない／自動修正しない
+- 行番号はCSVの物理行（ヘッダ=1、最初のデータ=2）
+
+## Review Focus
+
+1. 値が `=` で始まるセル（CSVインジェクション）→ Excelで文字列のまま。Task 4 に `test_formula_like_text_is_not_formula`
+2. Shift_JIS で保存されたCSV（Excelで保存した場合）→ 正常に読める。Task 1 に `test_reads_cp932`
+3. 前後空白だけの必須項目 → 欠損扱い。Task 2 に `test_whitespace_only_is_missing`
+4. 伝票番号に `/` を含む → 安全なファイル名で出力。Task 4 に `test_safe_filename`
+5. 全行が要確認（出力伝票0件）→ 異常終了せず要確認一覧のみ出す。Task 6 に `test_run_all_rows_invalid`
+
+---
+
+### Task 1: models と reader
+
+**Files:** Create `src/shipdoc/{__init__,models,reader}.py`, `pyproject.toml`, `requirements.txt`, `.gitignore`; Test `tests/test_reader.py`
+
+**Interfaces — Produces:**
+- `models.COLUMNS: tuple[str, ...]`, `models.REQUIRED_COLUMNS`
+- `models.ShipmentRow(line_no: int, data: dict[str, str])`（frozen）
+- `models.Issue(line_no, detail_id, slip_no, category, message, raw: dict[str,str])`
+- `models.LineItem(detail_id, product_code, product_name, quantity: int, unit, unit_price: Decimal, note)` + `amount`
+- `models.Slip(slip_no, ship_date: date, customer_code, customer_name, items: list[LineItem])` + `total_quantity`, `total_amount`
+- `reader.read_shipments(path: Path) -> list[ShipmentRow]`、ヘッダ不一致・空ファイルで `reader.CsvFormatError`
+
+Tests: UTF-8(BOM付)/cp932 読込、行番号、値は文字列のまま（`"00123"`保持）、列不足で例外、読込前後でファイルのハッシュ不変。
+
+### Task 2: validator（行単位チェック）
+
+**Files:** Create `src/shipdoc/validator.py`; Test `tests/test_validator.py`
+
+**Interfaces — Produces:**
+- `parse_quantity(s) -> int | None`, `parse_price(s) -> Decimal | None`, `parse_date(s) -> date | None`
+- `find_row_issues(rows: list[ShipmentRow]) -> list[Issue]`
+- 区分文字列: `必須項目欠損`, `数量不正`, `単価不正`, `日付不正`, `明細ID重複`
+
+Tests: 欠損（空白のみ含む）、数量 `0`,`-1`,`1.5`,`abc`,`１０`(全角は不正) 、重複IDは全該当行、正常行は0件。
+
+### Task 3: grouper（伝票化と保留判定）
+
+**Files:** Create `src/shipdoc/grouper.py`; Test `tests/test_grouper.py`
+
+**Interfaces — Produces:** `group_slips(rows, row_issues, max_items=15) -> GroupResult(slips: list[Slip], issues: list[Issue])`
+- 追加区分: `ヘッダ不一致`, `明細行数超過`, `同一伝票内に要確認行あり`
+- 伝票の出現順を保持、`issues` は行番号順
+
+Tests: 1行不正で伝票ごと保留＋同伝票の正常行が掲載、ヘッダ不一致、16行で超過、正常伝票の合計。
+
+### Task 4: テンプレートと Excel 出力
+
+**Files:** Create `src/shipdoc/{template_layout,template_builder,excel_writer}.py`, `scripts/make_template.py`, `templates/納品明細テンプレート.xlsx`; Test `tests/test_excel_writer.py`
+
+**Interfaces — Produces:** `build_template(path)`, `safe_filename(s) -> str`, `write_slip_excel(slip, template_path, out_path, issue_date) -> Path`
+- セル配置は `template_layout` の定数のみを参照（テンプレートと書込の唯一の対応表）
+
+Tests: 値が所定セルに入る、合計、テンプレート書式（タイトル）が残る、数式化しない、安全なファイル名。
+
+### Task 5: PDF 出力
+
+**Files:** Create `src/shipdoc/pdf_writer.py`; Test `tests/test_pdf_writer.py`
+
+**Interfaces — Produces:** `write_slip_pdf(slip, out_path, issue_date) -> Path`（A4、HeiseiKakuGo-W5）
+
+Tests: `%PDF` で始まる、1ページ、伝票番号・得意先名がテキスト抽出できる（`pypdf` は使わず reportlab の非圧縮出力で検査）。
+
+### Task 6: 要確認一覧・app・CLI
+
+**Files:** Create `src/shipdoc/{review_writer,app,cli,__main__}.py`, `sample_data/shipments_sample.csv`; Test `tests/test_app.py`
+
+**Interfaces — Produces:** `write_review_list(issues, out_path) -> Path`、`run(csv_path, output_root, template_path, now) -> RunSummary(output_dir, slip_count, issue_count, held_slip_nos)`、`cli.main(argv) -> int`
+
+Tests: サンプル10行で伝票3件出力・要確認3行（D0004 2行, D0005 1行）、元CSV不変、全行不正でも完走、出力先が毎回別フォルダ。
+
+### Task 7: 実行用ファイルと README
+
+**Files:** Create `セットアップ.command`, `実行.command`, `README.md`, `docs/images/*`
+
+Verify: `bash -n` で構文確認、サンプル実行で出力確認、全テスト PASS。
