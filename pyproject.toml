@@ -1,0 +1,10 @@
+[project]
+name = "shipdoc"
+version = "1.0.0"
+description = "出荷CSVから納品明細Excel/PDFを自動生成し、問題行を要確認一覧に出力するツール"
+requires-python = ">=3.10"
+dependencies = ["openpyxl>=3.1", "reportlab>=4.0"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
