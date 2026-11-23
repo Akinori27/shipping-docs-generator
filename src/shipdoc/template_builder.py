@@ -40,12 +40,16 @@ def build_template(path: Path) -> Path:
         L.SHIP_DATE_LABEL_CELL: "出荷日",
         L.HONORIFIC_CELL: "御中",
     }
+    ws.merge_cells(f"{L.CUSTOMER_CODE_LABEL_CELL}:B3")
+    ws.merge_cells(f"{L.SHIP_DATE_LABEL_CELL}:B6")
     for cell, text in labels.items():
         ws[cell] = text
         ws[cell].font = Font(name=_FONT, size=10)
     ws[L.ISSUE_DATE_CELL].number_format = "yyyy/mm/dd"
     ws[L.SHIP_DATE_CELL].number_format = "yyyy/mm/dd"
     ws[L.SHIP_DATE_CELL].alignment = Alignment(horizontal="left")
+    ws[L.ISSUE_DATE_CELL].alignment = Alignment(horizontal="left")
+    ws[L.SLIP_NO_CELL].alignment = Alignment(horizontal="left")
 
     ws.merge_cells(L.CUSTOMER_NAME_RANGE)
     ws[L.CUSTOMER_NAME_CELL].font = Font(name=_FONT, size=14, bold=True, underline="single")
