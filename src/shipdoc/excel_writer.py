@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import re
 from datetime import date
+from decimal import Decimal
 from pathlib import Path
 
 from openpyxl import load_workbook
@@ -12,12 +13,24 @@ from . import template_layout as L
 from .models import Slip
 
 _UNSAFE_CHARS = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
+MAX_FILENAME_CHARS = 80  # Macのファイル名上限（255バイト）に余裕を持たせる
 
 
 def safe_filename(text: str) -> str:
-    """ファイル名に使えない文字を「_」に置き換える。"""
-    name = _UNSAFE_CHARS.sub("_", text).strip().strip(".")
+    """ファイル名に使えない文字を「_」に置き換え、長すぎる場合は切り詰める。"""
+    name = _UNSAFE_CHARS.sub("_", text).strip().strip(".")[:MAX_FILENAME_CHARS]
     return name or "_"
+
+
+def number_format_for(value: int | Decimal) -> str:
+    """値の小数桁数に合わせた表示形式。PDFと同じ桁数で表示し、丸めない。"""
+    places = max(0, -Decimal(value).normalize().as_tuple().exponent)
+    return "#,##0" if places == 0 else "#,##0." + "0" * places
+
+
+def _set_number(cell: Cell, value: int | Decimal) -> None:
+    cell.value = value
+    cell.number_format = number_format_for(value)
 
 
 def _set_text(cell: Cell, value: str) -> None:
@@ -44,12 +57,12 @@ def write_slip_excel(slip: Slip, template_path: Path, out_path: Path, issue_date
         _set_text(ws[f"{cols['product_name']}{row}"], item.product_name)
         ws[f"{cols['quantity']}{row}"] = item.quantity
         _set_text(ws[f"{cols['unit']}{row}"], item.unit)
-        ws[f"{cols['unit_price']}{row}"] = item.unit_price
-        ws[f"{cols['amount']}{row}"] = item.amount
+        _set_number(ws[f"{cols['unit_price']}{row}"], item.unit_price)
+        _set_number(ws[f"{cols['amount']}{row}"], item.amount)
         _set_text(ws[f"{cols['note']}{row}"], item.note)
 
     ws[L.TOTAL_QUANTITY_CELL] = slip.total_quantity
-    ws[L.TOTAL_AMOUNT_CELL] = slip.total_amount
+    _set_number(ws[L.TOTAL_AMOUNT_CELL], slip.total_amount)
 
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)

@@ -21,3 +21,12 @@ def test_writes_issue_rows_with_raw_data(tmp_path):
 def test_empty_list_says_no_issues(tmp_path):
     ws = load_workbook(write_review_list([], tmp_path / "r.xlsx")).active
     assert ws["A2"].value == "要確認の行はありません"
+
+
+def test_control_characters_are_escaped(tmp_path):
+    raw = make_row(商品名="用紙\x1a")
+    issue = Issue(line_no=2, detail_id="L1", slip_no="D1", category="使用できない文字",
+                  message="商品名に使用できない文字があります", raw=raw)
+    ws = load_workbook(write_review_list([issue], tmp_path / "r.xlsx")).active
+    name_cell = ws.cell(row=2, column=len(REVIEW_HEADERS) + COLUMNS.index("商品名") + 1)
+    assert name_cell.value == "用紙<0x1A>"

@@ -83,3 +83,21 @@ def test_issue_keeps_raw_row_unmodified():
     issues = find_row_issues(rows_of(row))
     assert issues[0].raw == row
     assert issues[0].raw is not row
+
+
+def test_extra_fields_is_column_count_issue():
+    row = ShipmentRow(line_no=2, data=make_row(単価="1", 備考="200"), field_count=12, extra=("",))
+    issues = find_row_issues([row])
+    assert [i.category for i in issues] == ["列数不一致"]
+    assert "12" in issues[0].message and "11" in issues[0].message
+
+
+def test_missing_fields_is_column_count_issue():
+    row = ShipmentRow(line_no=2, data=make_row(), field_count=3)
+    assert "列数不一致" in [i.category for i in find_row_issues([row])]
+
+
+def test_control_character_is_reported():
+    issues = find_row_issues(rows_of(make_row(商品名="用紙\x1a")))
+    assert [i.category for i in issues] == ["使用できない文字"]
+    assert "商品名" in issues[0].message

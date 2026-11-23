@@ -7,7 +7,7 @@ from shipdoc.models import ShipmentRow
 from shipdoc.validator import find_row_issues
 
 
-def run(*dicts, max_items=15):
+def run(*dicts, max_items=None):
     rows = [ShipmentRow(line_no=i + 2, data=d) for i, d in enumerate(dicts)]
     return group_slips(rows, find_row_issues(rows), max_items=max_items)
 
@@ -61,10 +61,10 @@ def test_too_many_items_holds_slip():
     assert len(result.issues) == 3
 
 
-def test_row_without_slip_no_is_reported_once():
+def test_row_without_slip_no_is_reported_once_and_next_slip_is_held():
     result = run(make_row(伝票番号="", 明細ID="L1"), make_row(伝票番号="D9", 明細ID="L2"))
-    assert [s.slip_no for s in result.slips] == ["D9"]
-    assert [i.category for i in result.issues] == ["必須項目欠損"]
+    assert result.slips == []
+    assert [i.category for i in result.issues] == ["必須項目欠損", "同一伝票内に要確認行あり"]
 
 
 def test_same_date_in_different_notation_is_not_mismatch():
@@ -72,3 +72,33 @@ def test_same_date_in_different_notation_is_not_mismatch():
                  make_row(明細ID="L2", 出荷日="2026-11-20"))
     assert result.issues == []
     assert len(result.slips) == 1
+
+
+def test_blank_slip_no_holds_neighbouring_slips():
+    result = run(
+        make_row(伝票番号="D1", 明細ID="L1"),
+        make_row(伝票番号="", 明細ID="L2"),
+        make_row(伝票番号="D2", 明細ID="L3"),
+        make_row(伝票番号="D3", 明細ID="L4"),
+    )
+    assert [s.slip_no for s in result.slips] == ["D3"]
+    assert [(i.line_no, i.category) for i in result.issues] == [
+        (2, "同一伝票内に要確認行あり"), (3, "必須項目欠損"), (4, "同一伝票内に要確認行あり")]
+    assert "3行目" in result.issues[0].message
+
+
+def test_layout_check_holds_slip():
+    rows = [ShipmentRow(line_no=2, data=make_row(明細ID="L1")),
+            ShipmentRow(line_no=3, data=make_row(明細ID="L2"))]
+    result = group_slips(rows, [], layout_check=lambda slip: ["商品名（L1）が長すぎます"])
+    assert result.slips == []
+    assert [i.category for i in result.issues] == ["帳票に収まらない"] * 2
+    assert "L1" in result.issues[0].message
+
+
+def test_max_items_follows_template_layout(monkeypatch):
+    from shipdoc import template_layout
+    monkeypatch.setattr(template_layout, "ITEM_ROWS", 2)
+    result = run(*[make_row(明細ID=f"L{n}") for n in range(3)])
+    assert result.slips == []
+    assert {i.category for i in result.issues} == {"明細行数超過"}

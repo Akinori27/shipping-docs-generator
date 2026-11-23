@@ -6,7 +6,7 @@ from collections import defaultdict
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
-from .models import REQUIRED_COLUMNS, Issue, ShipmentRow
+from .models import COLUMNS, REQUIRED_COLUMNS, Issue, ShipmentRow
 
 # 半角数字のみ許可（全角数字は Python の int() では通ってしまうため正規表現で弾く）
 _QUANTITY_RE = re.compile(r"[0-9]+")
@@ -18,6 +18,11 @@ CAT_QUANTITY = "数量不正"
 CAT_PRICE = "単価不正"
 CAT_DATE = "日付不正"
 CAT_DUPLICATE = "明細ID重複"
+CAT_COLUMN_COUNT = "列数不一致"
+CAT_CONTROL_CHAR = "使用できない文字"
+
+# Excelに書き込めない制御文字（タブ・改行は除く）
+CONTROL_CHARS_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 
 
 def parse_quantity(text: str) -> int | None:
@@ -70,6 +75,16 @@ def make_issue(row: ShipmentRow, category: str, message: str) -> Issue:
 def _check_row(row: ShipmentRow) -> list[Issue]:
     data = row.data
     issues: list[Issue] = []
+    if row.field_count != len(COLUMNS):
+        message = f"この行には値が{row.field_count}個あります（正しくは{len(COLUMNS)}個）。"
+        if row.extra:
+            message += f"余分な値: {' / '.join(row.extra)}。"
+        message += "値の中のカンマ（例: 1,200）や区切りの抜けを確認してください"
+        issues.append(make_issue(row, CAT_COLUMN_COUNT, message))
+    bad_chars = [c for c in COLUMNS if CONTROL_CHARS_RE.search(data.get(c, ""))]
+    if bad_chars:
+        issues.append(make_issue(
+            row, CAT_CONTROL_CHAR, f"制御文字が含まれています: {', '.join(bad_chars)}"))
     missing = [c for c in REQUIRED_COLUMNS if _is_blank(data.get(c, ""))]
     if missing:
         issues.append(make_issue(row, CAT_MISSING, f"未入力の必須項目: {', '.join(missing)}"))

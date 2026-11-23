@@ -86,3 +86,48 @@ def test_cli_bad_columns(tmp_path, capsys):
     code = cli.main([str(bad), "--output", str(tmp_path)])
     assert code == 1
     assert "列が想定と違います" in capsys.readouterr().out
+
+
+def test_case_only_different_slip_numbers_get_separate_files(tmp_path, csv_factory):
+    path = csv_factory([make_row(伝票番号="a1", 明細ID="L1", 得意先名="客A"),
+                        make_row(伝票番号="A1", 明細ID="L2", 得意先名="客B")])
+    summary = run(path, tmp_path / "out", TEMPLATE, NOW)
+    assert summary.slip_count == 2
+    assert len(list((summary.output_dir / "excel").glob("*.xlsx"))) == 2
+    assert len(list((summary.output_dir / "pdf").glob("*.pdf"))) == 2
+
+
+def test_unquoted_comma_in_price_holds_slip(tmp_path):
+    from shipdoc.models import COLUMNS
+    path = tmp_path / "raw.csv"
+    path.write_text(",".join(COLUMNS) + "\n"
+                    "D1,L1,2026-11-20,C1,客,P1,商品,5,個,1,200,\n"
+                    "D2,L2,2026-11-20,C1,客,P1,商品,5,個,1200,\n", encoding="utf-8")
+    summary = run(path, tmp_path / "out", TEMPLATE, NOW)
+    assert summary.slip_count == 1
+    assert summary.held_slip_nos == ["D1"]
+
+
+def test_too_long_product_name_holds_slip(tmp_path, csv_factory):
+    path = csv_factory([make_row(明細ID="L1", 商品名="長" * 47)])
+    summary = run(path, tmp_path / "out", TEMPLATE, NOW)
+    assert summary.slip_count == 0
+    ws = load_workbook(summary.output_dir / "要確認一覧.xlsx").active
+    assert ws["D2"].value == "帳票に収まらない"
+
+
+def test_control_character_does_not_crash(tmp_path, csv_factory):
+    path = csv_factory([make_row(明細ID="L1", 備考="\x1a"), make_row(伝票番号="D2", 明細ID="L2")])
+    summary = run(path, tmp_path / "out", TEMPLATE, NOW)
+    assert summary.slip_count == 1
+    assert summary.held_slip_nos == ["D0001"]
+
+
+def test_cli_unexpected_error(tmp_path, capsys, monkeypatch):
+    def boom(*args, **kwargs):
+        raise RuntimeError("disk full")
+    monkeypatch.setattr(cli, "run", boom)
+    code = cli.main([str(SAMPLE), "--output", str(tmp_path)])
+    assert code == 1
+    out = capsys.readouterr().out
+    assert "予期しないエラー" in out and "disk full" in out

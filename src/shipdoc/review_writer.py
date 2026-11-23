@@ -8,6 +8,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 from .models import COLUMNS, Issue
+from .validator import CONTROL_CHARS_RE
 
 REVIEW_HEADERS: tuple[str, ...] = ("CSV行番号", "明細ID", "伝票番号", "区分", "内容")
 _WIDTHS = (10, 10, 10, 22, 60)
@@ -42,7 +43,8 @@ def write_review_list(issues: list[Issue], out_path: Path) -> Path:
             if text == "":
                 continue
             cell = ws.cell(row=row_idx, column=col_idx)
-            cell.value = text
+            # Excelに書けない制御文字は <0x1A> のように見える形で残す
+            cell.value = CONTROL_CHARS_RE.sub(lambda m: f"<0x{ord(m.group()):02X}>", text)
             cell.data_type = "s"  # 「=」で始まる値も数式にしない
 
     ws.freeze_panes = "B2"

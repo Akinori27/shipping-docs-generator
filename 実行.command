@@ -30,7 +30,7 @@ else
   set -- "$choice"
 fi
 
-.venv/bin/python -m shipdoc "$@"
+PYTHONPATH="$PWD/src" .venv/bin/python -m shipdoc "$@"
 status=$?
 if [ $status -eq 0 ]; then
   latest=$(ls -dt output/*/ 2>/dev/null | head -n 1)

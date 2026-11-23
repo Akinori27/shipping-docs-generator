@@ -30,24 +30,30 @@ def read_shipments(path: Path) -> list[ShipmentRow]:
     if not raw.strip():
         raise CsvFormatError("CSVが空です")
 
-    reader = csv.DictReader(io.StringIO(_decode(raw), newline=""))
-    header = [h.strip() for h in (reader.fieldnames or [])]
+    reader = csv.reader(io.StringIO(_decode(raw), newline=""))
+    header = [h.strip() for h in next(reader)]
+    duplicated = sorted({h for h in header if header.count(h) > 1})
     missing = [c for c in COLUMNS if c not in header]
     unknown = [h for h in header if h not in COLUMNS]
-    if missing or unknown:
+    if duplicated or missing or unknown:
         parts = []
+        if duplicated:
+            parts.append(f"重複している列: {', '.join(duplicated)}")
         if missing:
             parts.append(f"不足している列: {', '.join(missing)}")
         if unknown:
             parts.append(f"想定外の列: {', '.join(unknown)}")
         raise CsvFormatError("CSVの列が想定と違います（" + " / ".join(parts) + "）")
-    reader.fieldnames = header
 
     rows: list[ShipmentRow] = []
-    for record in reader:
-        if all(not (v or "").strip() for k, v in record.items() if k is not None):
+    for values in reader:
+        if all(not v.strip() for v in values):
             continue  # 完全な空行は読み飛ばす
-        data = {c: (record.get(c) or "") for c in COLUMNS}
-        # line_num は読み終えた行の物理行番号（ヘッダ=1）
-        rows.append(ShipmentRow(line_no=reader.line_num, data=data))
+        data = {name: (values[i] if i < len(values) else "") for i, name in enumerate(header)}
+        rows.append(ShipmentRow(
+            line_no=reader.line_num,  # 読み終えた行の物理行番号（ヘッダ=1）
+            data={c: data[c] for c in COLUMNS},
+            field_count=len(values),
+            extra=tuple(values[len(header):]),
+        ))
     return rows

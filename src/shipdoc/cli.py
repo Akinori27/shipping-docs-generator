@@ -42,5 +42,10 @@ def main(argv: list[str] | None = None) -> int:
     except CsvFormatError as e:
         print(f"[エラー] {e}")
         return 1
+    except Exception as e:  # 想定外のエラーでも、画面に分かる言葉で伝える
+        print(f"[エラー] 予期しないエラーが発生したため処理を中止しました: {type(e).__name__}: {e}")
+        print(f"途中まで作成されたファイルがある場合は {args.output} 内の最新フォルダにあります。")
+        print("このメッセージを添えて開発者へご連絡ください。")
+        return 1
     print(summary.report())
     return 0

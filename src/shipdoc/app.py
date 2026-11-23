@@ -1,13 +1,14 @@
 """処理全体の流れ: 読込 → チェック → 伝票化 → 出力。"""
 from __future__ import annotations
 
+import unicodedata
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
 from .excel_writer import safe_filename, write_slip_excel
 from .grouper import group_slips
-from .pdf_writer import write_slip_pdf
+from .pdf_writer import layout_problems, write_slip_pdf
 from .reader import read_shipments
 from .review_writer import write_review_list
 from .validator import find_row_issues
@@ -56,12 +57,21 @@ def _new_output_dir(output_root: Path, now: datetime) -> Path:
 
 
 def _unique_stem(slip_no: str, used: set[str]) -> str:
+    """伝票ごとに重ならないファイル名を決める。
+
+    Macの標準ディスクは大文字・小文字や濁点の表し方の違いを区別しないため、
+    「a1」と「A1」は同じファイルとみなされ上書きされてしまう。比較用に
+    正規化した名前で重複を判定する。
+    """
+    def key(name: str) -> str:
+        return unicodedata.normalize("NFC", name).casefold()
+
     stem = f"納品明細_{safe_filename(slip_no)}"
     candidate, n = stem, 1
-    while candidate in used:
+    while key(candidate) in used:
         n += 1
         candidate = f"{stem}_{n}"
-    used.add(candidate)
+    used.add(key(candidate))
     return candidate
 
 
@@ -71,7 +81,7 @@ def run(csv_path: Path, output_root: Path, template_path: Path,
     csv_path, output_root = Path(csv_path), Path(output_root)
 
     rows = read_shipments(csv_path)
-    result = group_slips(rows, find_row_issues(rows))
+    result = group_slips(rows, find_row_issues(rows), layout_check=layout_problems)
 
     output_dir = _new_output_dir(output_root, now)
     excel_paths, pdf_paths, used = [], [], set()

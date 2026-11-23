@@ -43,3 +43,34 @@ def test_source_file_is_unchanged(csv_factory):
     before = hashlib.sha256(path.read_bytes()).hexdigest()
     read_shipments(path)
     assert hashlib.sha256(path.read_bytes()).hexdigest() == before
+
+
+HEADER = ",".join(COLUMNS)
+
+
+def write_text(tmp_path, text, name="raw.csv"):
+    path = tmp_path / name
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+def test_row_with_extra_fields_is_marked(tmp_path):
+    # 単価に「1,200」と打ち、引用符なしで保存された行（列が1つ増える）
+    path = write_text(tmp_path, HEADER + "\nD1,L1,2026-11-20,C1,客,P1,商品,5,個,1,200,\n")
+    row = read_shipments(path)[0]
+    assert row.field_count == 12
+    assert row.extra == ("",)
+    assert row.data["単価"] == "1"
+
+
+def test_row_with_missing_fields_is_marked(tmp_path):
+    path = write_text(tmp_path, HEADER + "\nD1,L1,2026-11-20\n")
+    row = read_shipments(path)[0]
+    assert row.field_count == 3
+    assert row.data["数量"] == ""
+
+
+def test_duplicate_header_raises(tmp_path):
+    path = write_text(tmp_path, HEADER + ",数量\nD1,L1,2026-11-20,C1,客,P1,商品,5,個,100,,7\n")
+    with pytest.raises(CsvFormatError, match="重複"):
+        read_shipments(path)

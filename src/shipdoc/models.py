@@ -42,6 +42,8 @@ class ShipmentRow:
 
     line_no: int  # CSV上の物理行番号（ヘッダ=1）
     data: dict[str, str]
+    field_count: int = len(COLUMNS)  # この行に実際にあった値の数
+    extra: tuple[str, ...] = ()  # 列数より多かった分の値（そのまま保持）
 
 
 @dataclass(frozen=True)

@@ -52,6 +52,7 @@ def build_template(path: Path) -> Path:
     ws[L.SLIP_NO_CELL].alignment = Alignment(horizontal="left")
 
     ws.merge_cells(L.CUSTOMER_NAME_RANGE)
+    ws[L.CUSTOMER_NAME_CELL].alignment = Alignment(shrink_to_fit=True, vertical="center")
     ws[L.CUSTOMER_NAME_CELL].font = Font(name=_FONT, size=14, bold=True, underline="single")
     ws[L.HONORIFIC_CELL].font = Font(name=_FONT, size=12)
     ws.row_dimensions[4].height = 24
@@ -69,7 +70,7 @@ def build_template(path: Path) -> Path:
         cell.border = _BOX
         cell.alignment = Alignment(horizontal="center")
 
-    formats = {"quantity": "#,##0", "unit_price": "#,##0.##", "amount": "#,##0"}
+    formats = {"quantity": "#,##0", "unit_price": "#,##0", "amount": "#,##0"}
     for row in range(L.ITEM_FIRST_ROW, L.TOTAL_ROW + 1):
         for key, col in L.ITEM_COLUMNS.items():
             cell = ws[f"{col}{row}"]
@@ -79,6 +80,9 @@ def build_template(path: Path) -> Path:
                 cell.number_format = formats[key]
             if key == "no":
                 cell.alignment = Alignment(horizontal="center")
+            else:
+                # 長い値は枠からはみ出さず、文字を縮めて表示する
+                cell.alignment = Alignment(shrink_to_fit=True, vertical="center")
 
     ws[L.TOTAL_LABEL_CELL] = L.TOTAL_LABEL
     for cell in (L.TOTAL_LABEL_CELL, L.TOTAL_QUANTITY_CELL, L.TOTAL_AMOUNT_CELL):

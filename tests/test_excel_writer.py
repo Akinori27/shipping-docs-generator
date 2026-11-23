@@ -85,3 +85,31 @@ def test_repo_template_matches_layout():
 ])
 def test_safe_filename(text, expected):
     assert safe_filename(text) == expected
+
+
+def item_cell(ws, key, offset=0):
+    return ws[f"{L.ITEM_COLUMNS[key]}{L.ITEM_FIRST_ROW + offset}"]
+
+
+def test_integer_price_format_has_no_trailing_point(tmp_path, template):
+    ws = written_sheet(tmp_path, template, make_slip())
+    assert item_cell(ws, "unit_price").number_format == "#,##0"
+    assert item_cell(ws, "amount").number_format == "#,##0"
+
+
+def test_decimal_values_are_shown_without_rounding(tmp_path, template):
+    slip = make_slip(n_items=1, unit_price=Decimal("12.5"), quantity=3)
+    ws = written_sheet(tmp_path, template, slip)
+    assert item_cell(ws, "unit_price").number_format == "#,##0.0"
+    assert item_cell(ws, "amount").number_format == "#,##0.0"
+    assert ws[L.TOTAL_AMOUNT_CELL].number_format == "#,##0.0"
+
+
+def test_text_cells_shrink_to_fit(tmp_path, template):
+    ws = written_sheet(tmp_path, template, make_slip())
+    assert item_cell(ws, "product_name").alignment.shrink_to_fit
+    assert ws[L.CUSTOMER_NAME_CELL].alignment.shrink_to_fit
+
+
+def test_safe_filename_limits_length():
+    assert len(safe_filename("A" * 300)) <= 100
