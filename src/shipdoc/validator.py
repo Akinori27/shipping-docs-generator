@@ -56,7 +56,7 @@ def _is_blank(value: str) -> bool:
     return not value.strip()  # str.strip() は全角スペースも取り除く
 
 
-def _issue(row: ShipmentRow, category: str, message: str) -> Issue:
+def make_issue(row: ShipmentRow, category: str, message: str) -> Issue:
     return Issue(
         line_no=row.line_no,
         detail_id=row.data.get("明細ID", "").strip(),
@@ -72,7 +72,7 @@ def _check_row(row: ShipmentRow) -> list[Issue]:
     issues: list[Issue] = []
     missing = [c for c in REQUIRED_COLUMNS if _is_blank(data.get(c, ""))]
     if missing:
-        issues.append(_issue(row, CAT_MISSING, f"未入力の必須項目: {', '.join(missing)}"))
+        issues.append(make_issue(row, CAT_MISSING, f"未入力の必須項目: {', '.join(missing)}"))
 
     checks = (
         ("数量", parse_quantity, CAT_QUANTITY, "1以上の整数（半角）で入力してください"),
@@ -84,7 +84,7 @@ def _check_row(row: ShipmentRow) -> list[Issue]:
         if column in missing:
             continue  # 欠損として報告済み
         if parser(value) is None:
-            issues.append(_issue(row, category, f"{column}「{value}」は不正です。{hint}"))
+            issues.append(make_issue(row, category, f"{column}「{value}」は不正です。{hint}"))
     return issues
 
 
@@ -101,7 +101,7 @@ def _check_duplicates(rows: list[ShipmentRow]) -> list[Issue]:
         lines = lines_by_id.get(detail_id, [])
         if len(lines) > 1:
             others = ", ".join(str(n) for n in lines if n != row.line_no)
-            issues.append(_issue(
+            issues.append(make_issue(
                 row, CAT_DUPLICATE,
                 f"明細ID「{detail_id}」が他の行（{others}行目）と重複しています"))
     return issues
