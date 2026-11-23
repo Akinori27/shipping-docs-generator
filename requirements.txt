@@ -1,6 +1,8 @@
 # 実行に必要
 openpyxl>=3.1
-reportlab>=4.0
+reportlab>=4.0; python_version >= "3.10"
+# Mac標準の Python 3.9 では、3.9 に対応する reportlab 4 系を使う
+reportlab>=4.0,<4.3; python_version < "3.10"
 # テストに必要
 pytest>=8.0
 pypdf>=4.0
