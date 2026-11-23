@@ -41,3 +41,21 @@ def csv_factory(tmp_path):
     def _make(rows, name="input.csv", **kwargs):
         return write_csv(tmp_path / name, rows, **kwargs)
     return _make
+
+
+def make_slip(slip_no: str = "D0001", n_items: int = 2, **item_overrides):
+    """出力テスト用の検証済み伝票を作る。"""
+    from datetime import date
+    from decimal import Decimal
+
+    from shipdoc.models import LineItem, Slip
+
+    items = []
+    for n in range(1, n_items + 1):
+        fields = dict(detail_id=f"L{n:03d}", product_code=f"0012{n}",
+                      product_name=f"商品{n}", quantity=n * 2, unit="箱",
+                      unit_price=Decimal("1200"), note="")
+        fields.update(item_overrides)
+        items.append(LineItem(**fields))
+    return Slip(slip_no=slip_no, ship_date=date(2026, 11, 20), customer_code="C001",
+                customer_name="サンプル商事株式会社", items=tuple(items))
