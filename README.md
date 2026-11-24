@@ -168,7 +168,7 @@ python3 -m venv .venv
 - 使用ライブラリ：[openpyxl](https://openpyxl.readthedocs.io/)（Excel）、[reportlab](https://www.reportlab.com/)（PDF。標準の日本語フォントを使うため、フォントの追加インストールは不要）、pytest / pypdf（テスト）
 - 対応 Python：3.9 以上（Mac標準の Python 3.9 でも動作確認済み）
 - テンプレートの作り直し：`.venv/bin/python scripts/make_template.py`
-- 設計の考え方：[docs/superpowers/specs/](docs/superpowers/specs/)
+- 設計の考え方：[設計書](docs/design/設計書.md)、[実装計画](docs/design/実装計画.md)
 
 ## 今回の範囲と今後の拡張
 
